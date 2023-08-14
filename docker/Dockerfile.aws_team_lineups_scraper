@@ -1,0 +1,17 @@
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim
+
+# Set the working directory in the container to /app
+WORKDIR /app
+
+ADD requirements_simple.txt /app
+RUN pip install -r requirements_simple.txt
+
+# Add the current directory contents into the container at /app
+ADD ./football_pipeline/expected_goals/fb_ref.py /app/football_pipeline/fb_ref.py
+# We can now call the scrape_team_lineups function from fb_ref directly via python fb_ref lineups (when calling via 'docker run' on EC2 or wherever, so
+#ADD ./football_pipeline/load_teamlineups_and_managers.py /app/football_pipeline/load_teamlineups_and_managers.py
+ADD ./football_pipeline/common.py /app/football_pipeline/common.py
+ADD ./football_pipeline/s3_utils.py /app/football_pipeline/s3_utils.py
+
+ENV PYTHONPATH "${PYTHONPATH}:/app"

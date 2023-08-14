@@ -1,0 +1,15 @@
+**/__pycache__
+notebooks/.ipynb_checkpoints/**
+**/**.pyc
+**/.pyc
+*.pyc
+/**.pyc
+*.pyc
+/**.db
+*.xlsx
+
+
+/lambda_payloads/
+/.ipynb_checkpoints/
+/certs/
+/notebooks/.ipynb_checkpoints/

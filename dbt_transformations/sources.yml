@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: fb_ref
+    database: football_athena
+    tables:
+      - name: football_xg_results_clean
+      - name: football_lineups_and_managers
+  - name: football_data_co_uk
+    database: football_athena
+    tables:
+      - name: results_and_odds_country_england
+
+
+

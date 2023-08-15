@@ -375,7 +375,7 @@ def read_links_from_queue():
 
     while True:
         response = sqs.receive_message(
-            QueueUrl='https://sqs.us-east-1.amazonaws.com/903546410703/team-linueps-queue',
+            QueueUrl=QUEUE_URL,
             MaxNumberOfMessages=10,  # Maximum is 10
             WaitTimeSeconds=20  # Enable long polling
         )

@@ -23,7 +23,7 @@ in order to gain greater insight and context for analytics and modeling purposes
 - Docker
 - Python, SQL
 - Infra partially managed by Terraform; migration in progress
-- DBT (eventually)
+- DBT (WIP)
 
 
 ## Data Source Pipelines

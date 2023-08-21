@@ -18,6 +18,7 @@ cp ./football_pipeline/match_results/football_data_co_uk.py ./lambda_payloads/
 pip install boto3 -t ./lambda_payloads/
 pip install beautifulsoup4 -t ./lambda_payloads/
 pip install requests -t ./lambda_payloads/
+pip install pandas -t ./lambda_payloads/
 
 # Zip the payload
 cd ./lambda_payloads/

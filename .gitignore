@@ -7,9 +7,20 @@ notebooks/.ipynb_checkpoints/**
 *.pyc
 /**.db
 *.xlsx
+*.tfstate
+*.backup
+
+.DS_Store
+.idea/
 
 
 /lambda_payloads/
 /.ipynb_checkpoints/
 /certs/
 /notebooks/.ipynb_checkpoints/
+
+terraform/.DS_Store
+terraform/.terraform.lock.hcl
+terraform/.terraform/
+terraform/logs/
+

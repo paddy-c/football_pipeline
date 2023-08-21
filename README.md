@@ -60,7 +60,7 @@ further analytics and queries.
 
 ### 2. Loading
 
-The team lineups queue data was consumed and processed via a Dockerized [Lambda function](docker/Dockerfile.aws_team_lineups_loader) and
+The team lineups queue data was consumed and processed via a Dockerized [Lambda function](football_pipeline/expected_goals/fb_ref.py) and
 loaded to S3.
 
 TBC

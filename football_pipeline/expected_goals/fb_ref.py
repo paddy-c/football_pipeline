@@ -6,6 +6,7 @@ Author: Padraig Cleary
 """
 
 import datetime as dt
+import io
 import json
 import os
 import re
@@ -394,6 +395,7 @@ def read_links_from_queue():
 
 
 def scrape_xg_result_seasons(league_name: str = None):
+    #TODO: NEED TO LOOK AT AN UPDATE/BACKFILL CHOICE SIMILAR TO THE RESULTS LOADER
     """
     Load all seasons with xg results for given league.
 
@@ -460,6 +462,89 @@ def team_lineups_loader_handler(event, context):
         s3_utils.upload_df_to_s3(bucket, file_key, df)
         print("Called upload_to_s3. Exiting")
     return
+
+
+def scrape_xg_results_handler(event, context):
+    version = os.environ['APP_VERSION']
+    scrape_xg_result_seasons()
+
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json"},
+        "body": json.dumps({
+            "Version ": version})}
+
+
+#TODO: need to reorganise this module better
+
+s3 = boto3.client('s3')
+
+expected_columns = [
+    'round',
+    'week',
+    'day',
+    'date',
+    'time',
+    'home',
+    'score',
+    'away',
+    'attendance',
+    'venue',
+    'referee',
+    'home_goals',
+    'away_goals',
+    'home_xg',
+    'away_xg',
+    'date_dt',
+]
+
+
+def standardise_current_xg_results_files_handler(event, context):
+    """
+    Lambda function handler that checks for missing or inconsistent
+    columns, missing data handling before writing to (league, season)
+    partitioned s3 buckets in the Parquet format
+    Args:
+        event:
+        context:
+
+    Returns:
+
+    """
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+
+    csv_obj = s3.get_object(Bucket=bucket, Key=key)
+    body = csv_obj['Body'].read().decode('utf-8')
+
+    df = pd.read_csv(io.StringIO(body))
+
+    # Check if the certain string exists in the file name
+    if 'round' not in df.columns.tolist():
+        df['round'] = 'N/A'
+    if 'week' not in df.columns.tolist():
+        df['week'] = -1.0
+
+    # we should partition by season and league name , in the folder structure
+    league_name = df['league_name'].values[0]
+    season_code = '-'.join([d for d in key.split('-') if d.isdigit() and len(d) == 4])  # i only want 'year' digits to be caught here
+
+    df.drop(columns=['league_name'], inplace=True)
+    df['attendance'] = df['attendance'].astype(float)
+
+    df['time'] = df['time'].fillna('missing')
+    df['venue'] = df['venue'].fillna('missing')
+
+    output_columns = expected_columns
+    output_buffer = io.BytesIO()
+
+    df[output_columns].to_parquet(output_buffer, index=False)
+    output_buffer.seek(0)
+
+    # adopt the '=' in the folders to help Glue infer the partition key column names:
+    s3.put_object(Bucket='football_pipeline-xg-results-clean', Key=f"league={league_name}/season={season_code}/{key}.parquet",
+                  Body=output_buffer.getvalue())
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ Author: Padraig Cleary
 import json
 import time
 from functools import cached_property
+import sys
 from urllib.parse import urljoin
 
 import boto3
@@ -15,24 +16,23 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import requests
 
-import common
-import s3_utils
+from football_pipeline import common, s3_utils
 
 RAW_FOOTBALL_DATA_CO_UK_BUCKET = 'football-data-co-uk-raw'
 
-MAJOR_COUNTRY_LIST = [
-    'https://www.football-data.co.uk/englandm.php',
-    'https://www.football-data.co.uk/scotlandm.php',
-    'https://www.football-data.co.uk/germanym.php',
-    'https://www.football-data.co.uk/italym.php',
-    'https://www.football-data.co.uk/spainm.php',
-    'https://www.football-data.co.uk/francem.php',
-    'https://www.football-data.co.uk/netherlandsm.php',
-    'https://www.football-data.co.uk/belgiumm.php',
-    'https://www.football-data.co.uk/portugalm.php',
-    'https://www.football-data.co.uk/turkeym.php',
-    'https://www.football-data.co.uk/greecem.php',
-]
+COUNTRY_URL_LOOKUP = {
+    'England': 'https://www.football-data.co.uk/englandm.php',
+    'Scotland': 'https://www.football-data.co.uk/scotlandm.php',
+    'Germany': 'https://www.football-data.co.uk/germanym.php',
+    'Italy': 'https://www.football-data.co.uk/italym.php',
+    'Spain': 'https://www.football-data.co.uk/spainm.php',
+    'France': 'https://www.football-data.co.uk/francem.php',
+    'Netherlands': 'https://www.football-data.co.uk/netherlandsm.php',
+    'Belgium': 'https://www.football-data.co.uk/belgiumm.php',
+    'Portugal': 'https://www.football-data.co.uk/portugalm.php',
+    'Turkey': 'https://www.football-data.co.uk/turkeym.php',
+    'Greece': 'https://www.football-data.co.uk/greecem.php',
+}
 
 season_date_format = {
     '0607': '%d/%m/%y',
@@ -121,13 +121,19 @@ class FootballDataCountry:
     data from football-data.co.uk
     """
 
-    def __init__(self, country_url):
-        self._country_url = country_url
+    def __init__(self, country_name: str):
+
+        try:
+            self._country_url = COUNTRY_URL_LOOKUP[country_name]
+        except KeyError:
+            print(f"country_name argument must be one of: {', '.join(COUNTRY_URL_LOOKUP.keys())}")
+            raise
+
         self._soup = None
         self._all_season_urls = None
         self._all_seasons = None
         self._current_seasons = None
-        self._country = None
+        self._country = country_name
 
     @property
     def country_url(self):
@@ -146,7 +152,7 @@ class FootballDataCountry:
 
     @cached_property
     def all_seasons(self):
-        self._all_seasons = [FootballDataSeason(url) for url in self.all_season_urls]
+        self._all_seasons = [FootballDataSeason(url, self.country) for url in self.all_season_urls]
         return self._all_seasons
 
     @property
@@ -157,7 +163,6 @@ class FootballDataCountry:
 
     @property
     def country(self):
-        self._country = self._get_country_string()
         return self._country
 
     def __repr__(self):
@@ -168,7 +173,7 @@ class FootballDataCountry:
         return csv_links
 
     def _get_country_string(self):
-        return self.country_url.split('/')[-1].replace('m.php', '')
+        return self.country_url.split('/')[-1].replace('m.php', '').capitalize()
 
     def load_current_seasons(self):
         """To be used for weekly/daily update jobs."""
@@ -190,11 +195,20 @@ class FootballDataSeason:
     Class to handle season-level result URLs
     from football_pipeline-data.co.uk
     """
-    def __init__(self, season_url):
-        self.season_url = season_url
+    def __init__(self, season_url, country):
+        self._season_url = season_url
+        self._country = country
         self._season_code = None
         self._year = None
         self._league_code = None
+
+    @property
+    def season_url(self):
+        return self._season_url
+
+    @property
+    def country(self):
+        return self._country
 
     @property
     def season_code(self):
@@ -210,7 +224,7 @@ class FootballDataSeason:
         return self._extract_league_code_from_results_url()
 
     def __repr__(self):
-        return f"FootballDataSeason(url='{self.season_url}')"
+        return f"FootballDataSeason(url='{self.season_url}', country='{self.country}')"
 
     def _extract_season_code_from_results_url(self) -> str:
         return self.season_url.split('/')[-2]
@@ -242,7 +256,7 @@ class FootballDataSeason:
     def upload_to_s3(self):
         file_content = requests.get(self.season_url).content
         s3 = boto3.resource("s3")
-        key_str = f"league={self.league_code}/season={self.season_code}/{self.league_code}.csv"
+        key_str = f"country={self.country}/league={self.league_code}/season={self.season_code}/{self.league_code}.csv"
         print(f"Start loading {key_str} to s3...")
         try:
             s3.Bucket(RAW_FOOTBALL_DATA_CO_UK_BUCKET).put_object(Key=key_str, Body=file_content)
@@ -267,7 +281,7 @@ def scrape_results_handler(event, context):
     mode = event.get('mode', 'update')  # Default to 'update' if mode isn't specified
 
     if mode == 'backfill':
-        for country_url in MAJOR_COUNTRY_LIST:
+        for country_url in COUNTRY_URL_LOOKUP:
             country = FootballDataCountry(country_url)
             country.load_all_seasons()
             time.sleep(0.5)
@@ -277,7 +291,7 @@ def scrape_results_handler(event, context):
         }
 
     elif mode == 'update':
-        for country_url in MAJOR_COUNTRY_LIST:
+        for country_url in COUNTRY_URL_LOOKUP:
             country = FootballDataCountry(country_url)
             country.load_current_seasons()
             time.sleep(0.5)
@@ -291,3 +305,15 @@ def scrape_results_handler(event, context):
             'statusCode': 400,
             'body': json.dumps(f'Invalid mode: {mode}')
         }
+
+
+if __name__ == "__main__":
+    valid_functions = ["update", "backfill"]
+
+    if len(sys.argv) < 2:
+        print(f"Please provide a function name as an argument. Valid options are: {', '.join(valid_functions)}")
+        sys.exit(1)
+
+    func_name = sys.argv[1]
+    event = {'mode': func_name}
+    scrape_results_handler(event, {})

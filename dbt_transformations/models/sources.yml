@@ -1,0 +1,356 @@
+version: 2
+
+sources:
+  - name: fb_ref
+    schema: football_athena
+    tables:
+      - name: football_xg_results_clean
+      - name: football_lineups_and_managers
+
+  - name: football_data_co_uk
+    schema: football_athena
+    tables:
+      - name: results_and_odds_country_england
+        columns:
+          - name: div
+            description: League division
+          - name: date
+            description: Match date (dd/mm/yy)
+          - name: time
+            description: Time of match kick off
+          - name: hometeam
+            description: Home team
+          - name: awayteam
+            description: Away team
+          - name: fthg
+            description: Home goals at full time
+          - name: ftag
+            description: Away goals at full time
+          - name: ftr
+            description: Full time result (H=Home Win, D=Draw, A=Away Win)
+          - name: hthg
+            description: Half time home team goals
+          - name: htag
+            description: Half time away team goals
+          - name: htr
+            description: Half time result (H=home win, D=draw, a=Away win)
+          - name: attendance
+            description: Crowd attendance
+          - name: referee
+            description: Match referee
+          - name: hs
+            description: Home team shots
+          - name: as
+            description: Away team shots
+          - name: hst
+            description: home team shots on target
+          - name: ast
+            description: away team shots on target
+          - name: hhw
+            description: Home team hit woodwork
+          - name: ahw
+            description: Away team hit woodwork
+          - name: hf
+            description: home team fouls committed
+          - name: af
+            description: away team fouls committed
+          - name: ho
+            description: Home team offsides
+          - name: ao
+            description: Away team offsides
+          - name: hbp
+            description: Home Team Bookings Points (10 = yellow, 25 = red)
+          - name: abp
+            description: Away Team Bookings Points (10 = yellow, 25 = red)
+          - name: gbh
+            description: Gamebookers home win odds
+          - name: gbd
+            description: Gamebookers draw odds
+          - name: gba
+            description: Gamebookers away win odds
+          - name: lbh
+            description: Ladbrokes home win odds
+          - name: lbd
+            description: Ladbrokes draw odds
+          - name: lba
+            description: Ladbrokes away win odds
+          - name: sbh
+            description: Sportingbet home win odds
+          - name: sbd
+            description: Sportingbet draw odds
+          - name: sba
+            description: Sportingbet away win odds
+          - name: hc
+            description: home team corners
+          - name: ac
+            description: away team corners
+          - name: hy
+            description: home team yellow cards
+          - name: ay
+            description: away team yellow cards
+          - name: hr
+            description: home team red cards
+          - name: ar
+            description: away team red cards
+          - name: b365h
+            description: bet365 home win odds
+          - name: b365d
+            description: bet365 draw odds
+          - name: b365a
+            description: bet365 away win odds
+          - name: bwh
+            description: bet&win home win odds
+          - name: bwd
+            description: bet&win draw odds
+          - name: bwa
+            description: bet&win away win odds
+          - name: sjh
+            description: Stan James home win odds
+          - name: sjd
+            description: Stan James draw odds
+          - name: sja
+            description: Stan James away win odds
+          - name: iwh
+            description: interwetten home win odds
+          - name: iwd
+            description: interwetten draw odds
+          - name: iwa
+            description: interwetten away win odds
+          - name: psh
+            description: Pinnacle home win odds
+          - name: psd
+            description: Pinnacle draw odds
+          - name: psa
+            description: Pinnacle away win odds
+          - name: whh
+            description: william hill home win odds
+          - name: whd
+            description: william hill draw odds
+          - name: wha
+            description: william hill away win odds
+          - name: syh
+            description: Stanleybet home win odds
+          - name: syd
+            description: Stanleybet draw odds
+          - name: sya
+            description: Stanleybet away win odds
+          - name: vch
+            description: vc bet home win odds
+          - name: vcd
+            description: vc bet draw odds
+          - name: vca
+            description: vc bet away win odds
+
+          - name: bb1x2
+            description: Number of BetBrain bookmakers used to calculate match odds averages and maximums
+          - name: bbmxh
+            description: Betbrain maximum home win odds
+          - name: bbavh
+            description: Betbrain average home win odds
+          - name: bbmxd
+            description: Betbrain maximum draw odds
+          - name: bbavd
+            description: Betbrain average draw win odds
+          - name: bbmxa
+            description: Betbrain maximum away win odds
+          - name: bbava
+            description: Betbrain average away win odds
+
+          - name: bbou
+            description: Number of BetBrain bookmakers used to calculate over/under 2.5 goals (total goals) averages and maximums
+
+          - name: bbmx>2.5
+            description: Betbrain maximum over 2.5 goals
+          - name: bbav>2.5
+            description: Betbrain average over 2.5 goals
+          - name: bbmx<2.5
+            description: Betbrain maximum under 2.5 goals
+          - name: bbav<2.5
+            description: Betbrain average under 2.5 goals
+
+          - name: bbah
+            description: Number of BetBrain bookmakers used to Asian handicap averages and maximums
+          - name: bbahh
+            description: Betbrain size of handicap (home team)
+          - name: bbmxahh
+            description: Betbrain maximum Asian handicap home team odds
+          - name: bbavahh
+            description: Betbrain average Asian handicap home team odds
+          - name: bbmxaha
+            description: Betbrain maximum Asian handicap away team odds
+          - name: bbavaha
+            description: Betbrain average Asian handicap away team odds
+
+          - name: bsh
+            description: Blue Square home win odds
+          - name: bsd
+            description: Blue Square draw odds
+          - name: bsa
+            description: Blue Square away win odds
+
+          - name: soh
+            description: Sporting Odds home win odds
+          - name: sod
+            description: Sporting Odds draw odds
+          - name: soa
+            description: Sporting Odds away win odds
+
+          - name: gb>2.5
+            description: Gamebookers over 2.5 goals
+          - name: gb<2.5
+            description: Gamebookers under 2.5 goals
+
+          - name: gbahh
+            description: Gamebookers Asian handicap home team odds
+          - name: gbaha
+            description: Gamebookers Asian handicap away team odds
+          - name: gbah
+            description: Gamebookers size of handicap (home team)
+
+          - name: lbahh
+            description: Ladbrokes Asian handicap home team odds
+          - name: lbaha
+            description: Ladbrokes Asian handicap away team odds
+          - name: lbah
+            description: Ladbrokes size of handicap (home team)
+
+          - name: b365ah
+            description: Bet365 size of handicap (home team)
+
+          - name: league
+            description: duplicate of div
+
+          - name: season
+            description: Season code (e.g 2000-2001 = 0001; 2021-2022 = 2122, etc)
+
+          - name: maxh
+            description: market maximum home win odds
+          - name: maxd
+            description: market maximum draw win odds
+          - name: maxa
+            description: market maximum away win odds
+          - name: avgh
+            description: market average home win odds
+          - name: avgd
+            description: market average draw win odds
+          - name: avga
+            description: market average away win odds
+          - name: b365>2.5
+            description: bet365 over 2.5 goals
+          - name: b365<2.5
+            description: bet365 under 2.5 goals
+          - name: p>2.5
+            description: pinnacle over 2.5 goals
+          - name: p<2.5
+            description: pinnacle under 2.5 goals
+          - name: max>2.5
+            description: market maximum over 2.5 goals
+          - name: max<2.5
+            description: market maximum under 2.5 goals
+          - name: avg>2.5
+            description: market average over 2.5 goals
+          - name: avg<2.5
+            description: market average under 2.5 goals
+          - name: ahh
+            description: market size of handicap (home team) (since 2019/2020)
+          - name: b365ahh
+            description: bet365 asian handicap home team odds
+          - name: b365aha
+            description: bet365 asian handicap away team odds
+          - name: pahh
+            description: pinnacle asian handicap home team odds
+          - name: paha
+            description: pinnacle asian handicap away team odds
+          - name: maxahh
+            description: market maximum asian handicap home team odds
+          - name: maxaha
+            description: market maximum asian handicap away team odds
+          - name: avgahh
+            description: market average asian handicap home team odds
+          - name: avgaha
+            description: market average asian handicap away team odds
+          - name: b365ch
+            description: closing b365h price
+          - name: b365cd
+            description: closing b365d price
+          - name: b365ca
+            description: closing b365a price
+          - name: bwch
+            description: closing bwh price
+          - name: bwcd
+            description: closing bwd price
+          - name: bwca
+            description: closing bwa price
+          - name: iwch
+            description: closing iwh price
+          - name: iwcd
+            description: closing iwd price
+          - name: iwca
+            description: closing iwa price
+          - name: psch
+            description: closing psh price
+          - name: pscd
+            description: closing psd price
+          - name: psca
+            description: closing psa price
+          - name: whch
+            description: closing whh price
+          - name: whcd
+            description: closing whd price
+          - name: whca
+            description: closing wha price
+          - name: vcch
+            description: closing vch price
+          - name: vccd
+            description: closing vcd price
+          - name: vcca
+            description: closing vca price
+          - name: maxch
+            description: closing maxh
+          - name: maxcd
+            description: closing maxd
+          - name: maxca
+            description: closing maxa
+          - name: avgch
+            description: closing avgh
+          - name: avgcd
+            description: closing avgd
+          - name: avgca
+            description: closing avga
+          - name: b365c>2.5
+            description: closing b365>2.5
+          - name: b365c<2.5
+            description: closing b365<2.5
+          - name: pc>2.5
+            description: closing p>2.5
+          - name: pc<2.5
+            description: closing p<2.5
+          - name: maxc>2.5
+            description: closing max>2.5
+          - name: maxc<2.5
+            description: closing max<2.5
+          - name: avgc>2.5
+            description: closing avg>2.5
+          - name: avgc<2.5
+            description: closing avg<2.5
+          - name: ahch
+            description: closing ahh
+          - name: b365cahh
+            description: closing b365ahh
+          - name: b365caha
+            description: closing b365aha
+          - name: pcahh
+            description: closing pahh
+          - name: pcaha
+            description: closing paha
+          - name: maxcahh
+            description: closing maxahh
+          - name: maxcaha
+            description: closing maxaha
+          - name: avgcahh
+            description: closing avgahh
+          - name: avgcaha
+            description: closing avgaha
+
+
+

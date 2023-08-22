@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: stg_results_and_prices
+    description: 'Check that matches are unique'
+
+    tests:
+        - dbt_utils.unique_combination_of_columns:
+            combination_of_columns:
+              - date
+              - hometeam
+              - awayteam
+

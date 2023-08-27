@@ -5,12 +5,16 @@ processing of data from football-data.co.uk.
 Author: Padraig Cleary
 """
 
+import io
 import json
 import time
 from functools import cached_property
+import re
 import sys
 from urllib.parse import urljoin
+import urllib.parse
 
+import awswrangler as wr
 import boto3
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -56,6 +60,11 @@ season_date_format = {
     '2122': '%d/%m/%Y',
     '2223': '%d/%m/%Y',
 }
+
+
+def is_valid_col(s):
+    is_not_empty = bool(s.strip()) and any(char.isalnum() for char in s)
+    return is_not_empty
 
 
 def _get_date_format(season_string):
@@ -112,6 +121,87 @@ def consolidate_footballdata_handler(event, context):
     """
     consolidated_df = concat_and_clean_footballdata_results()
     s3_utils.upload_df_to_s3('football_pipeline-processed', 'football_data_co_uk/epl_results_consolidated.csv', consolidated_df)
+
+
+def clean_dates_and_delimiters(bucket_name, file_key) -> pd.DataFrame:
+    """
+    Function to remove null/empty rows, clean up the dates and delimiters in 
+    the football-data.co.uk csv files.
+    Some files can also be Windows-encoded, so need to consider that. 
+    Returns:
+
+    """
+
+    try:
+        df = wr.s3.read_csv(f"s3://{bucket_name}/{file_key}", encoding='utf-8')
+    except UnicodeDecodeError:
+        try:
+            df = wr.s3.read_csv(f"s3://{bucket_name}/{file_key}", encoding='cp1252') # this is the only other encoding used that I've seen so far
+        except pd.errors.ParserError:
+            # indicative of the excess comma issue present in some files
+            # download the s3 object to a buffer object
+            buffer = io.BytesIO()
+            wr.s3.download(path=f"s3://{bucket_name}/{file_key}", local_file=buffer)
+
+            with io.BytesIO() as outfile:
+                i = 0
+                for line in buffer.getvalue().decode('cp1252').splitlines():
+
+                    if i == 0:
+                        column_list = [c for c in line.split(',') if is_valid_col(c)] # infer the expected number of columns from row 1
+                        expected_column_count = len(column_list)
+                        cleaned_header_line = ','.join(column_list)
+                        if '\n' not in cleaned_header_line:
+                            cleaned_header_line = cleaned_header_line+'\n'
+                        print(cleaned_header_line)
+                        outfile.write(cleaned_header_line.encode('utf-8'))
+                    else:
+                        columns = line.strip().split(',')
+                        if len(columns) > expected_column_count:  # could len(columns) ever be < expected_column_count?
+                            columns = columns[:expected_column_count]
+                        cleaned_line = ','.join(columns) + '\n'
+                        outfile.write(cleaned_line.encode('utf-8'))
+                    i = i+1
+
+                # If this fails; throw the error 
+                outfile.seek(0)
+                df = pd.read_csv(outfile)
+     
+    # Drop null rows
+    df.dropna(subset=['Div'], inplace=True)
+    # clean the dates, since different seasons have particular formats(!)
+    df['season'] = re.search(r'season=(\d+)', file_key).group(1)
+    df['date_format'] = df['season'].apply(lambda row: _get_date_format(row)) #TODO: this is EPL specific
+    df['Date'] = df.apply(lambda row: pd.to_datetime(row['Date'], format=row['date_format']), axis=1)
+    df['HomeTeam'] = df['HomeTeam'].str.strip()
+    df['AwayTeam'] = df['AwayTeam'].str.strip()
+
+    return df
+    
+
+def clean_footballdata_handler(event, context):
+    """
+    Lambda function handler that aims to apply some basic cleaning
+    and team name mapping for the football-data.co.uk csv result files.
+    Currently only implemented for EPL; other leagues are expected to have
+    their own data quirks that will probably need further hand-crafted cleaning
+    tools.
+
+    Args:
+        event:
+        context:
+
+    Returns:
+
+    """
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    file_key = event['Records'][0]['s3']['object']['key']
+    # Decoding the file key
+    file_key = urllib.parse.unquote_plus(file_key)
+
+    cleaned_df = clean_dates_and_delimiters(bucket_name, file_key)
+    cleaned_df.drop(columns=['season', 'date_format'], inplace=True)
+    s3_utils.upload_df_to_s3('football-data-co-uk-clean', file_key=file_key, df=cleaned_df)
 
 
 class FootballDataCountry:
@@ -187,7 +277,7 @@ class FootballDataCountry:
         print(f"Starting load of {self.country}...")
         for season in self.all_seasons:
             season.upload_to_s3()
-            time.sleep(0.5) # precaution measure to avoid hammering the server
+            time.sleep(1.5)  # precaution measure to avoid hammering the server
 
 
 class FootballDataSeason:
@@ -294,8 +384,6 @@ def scrape_results_handler(event, context):
         for country_url in COUNTRY_URL_LOOKUP:
             country = FootballDataCountry(country_url)
             country.load_current_seasons()
-            time.sleep(0.5)
-
         return {
             'statusCode': 200,
             'body': json.dumps('Update mode executed successfully')
@@ -307,13 +395,13 @@ def scrape_results_handler(event, context):
         }
 
 
+
 if __name__ == "__main__":
     valid_functions = ["update", "backfill"]
 
     if len(sys.argv) < 2:
         print(f"Please provide a function name as an argument. Valid options are: {', '.join(valid_functions)}")
         sys.exit(1)
-
     func_name = sys.argv[1]
     event = {'mode': func_name}
     scrape_results_handler(event, {})

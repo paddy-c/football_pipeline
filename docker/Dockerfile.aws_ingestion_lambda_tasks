@@ -15,3 +15,5 @@ ADD ./football_pipeline/expected_goals/fb_ref.py ${LAMBDA_TASK_ROOT}
 ADD ./football_pipeline/match_results/football_data_co_uk.py ${LAMBDA_TASK_ROOT}
 
 ENV PYTHONPATH "${PYTHONPATH}:/app"
+#ENV PYTHONPATH "${PYTHONPATH}:${LAMBDA_TASK_ROOT}"
+#ENTRYPOINT ["python", "-c", "import football_data_co_uk; football_data_co_uk.clean_footballdata_handler({},{})"]

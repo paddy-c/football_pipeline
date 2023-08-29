@@ -6,12 +6,14 @@ Author: Padraig Cleary
 """
 
 import datetime as dt
+from functools import cached_property
 import io
 import json
 import os
 import re
 import sys
 import time
+import urllib.parse
 
 import boto3
 import numpy as np
@@ -54,6 +56,18 @@ COMPETITION_NUMBER_LEAGUE_MAP = {
     "15": "League-One",
 }
 
+# These URLs are the current season results pages for each league
+SCORES_HOME_PAGE_URLS = {
+    "Premier-League": "https://fbref.com/en/comps/9/schedule/Premier-League-Scores-and-Fixtures",
+    "Championship": "https://fbref.com/en/comps/10/schedule/Championship-Scores-and-Fixtures",
+    "La-Liga": "https://fbref.com/en/comps/12/schedule/La-Liga-Scores-and-Fixtures",
+    "Major-League-Soccer": "https://fbref.com/en/comps/22/schedule/Major-League-Soccer-Scores-and-Fixtures",
+    "Ligue-1": "https://fbref.com/en/comps/13/schedule/Ligue-1-Scores-and-Fixtures",
+    "Bundesliga": "https://fbref.com/en/comps/20/schedule/Bundesliga-Scores-and-Fixtures",
+    "Serie-A": "https://fbref.com/en/comps/11/schedule/Serie-A-Scores-and-Fixtures",
+    "League-One": "https://fbref.com/en/comps/15/schedule/League-One-Scores-and-Fixtures",
+}
+
 
 class FBrefSeasonResultsPage:
     """
@@ -74,11 +88,33 @@ class FBrefSeasonResultsPage:
         self.url_soup = self._get_soup_object()
         self.is_current_season = self._is_current_season()
         self.league_name = self._get_league_name_from_url()
-        self.output_file_name = self.link.split("/")[-1]
+        self._output_file_name = None
         self.processed_xg_df = self.preprocess_fbref_xg_results()
         self.match_level_urls = self.get_match_links_from_dom()
 
-    def _get_soup_object(self) -> bs.BeautifulSoup:
+    @cached_property
+    def output_file_name(self) -> str:
+        """
+        Generate the output file name for the processed
+        season results file.
+
+        Returns:
+            output_file_name
+        """
+
+        if self.is_current_season:
+            # season string of current seasons is not encoded in the URL, unlike previous seasons, workaround for now
+            header = [h2 for h2 in self.url_soup.find_all('h2') if 'Fixtures' in h2.text][0].span.text
+            try:
+                season_string = re.search(r"(\d{4}-\d{4})", header).group(1)
+            except AttributeError:  # catch MLS season
+                season_string = re.search(r"(\d{4})", header).group(1)
+            self._output_file_name = f"{season_string}-{self.link.split('/')[-1]}"
+        else:
+            self._output_file_name = self.link.split("/")[-1] 
+        return self._output_file_name
+
+    def _get_soup_object(self) -> bs:
         """
         Get the BeautifulSoup object for the given season
         level URL.
@@ -186,14 +222,14 @@ class FBrefSeasonResultsPage:
 
     def save_to_s3(self):
         """
-        Save the processed season file to the football_pipeline-xg-results
+        Save the processed season file to the football-xg-results
         S3 bucket and update the S3 scraped_links file with the new link.
         Returns:
         """
-        s3_utils.upload_df_to_s3('football_pipeline-xg-results', self.output_file_name+".csv", self.processed_xg_df)
+        s3_utils.upload_df_to_s3('football-xg-results', self.output_file_name+".csv", self.processed_xg_df)
         if not self.is_current_season:  # we always want to keep trying the current season link for freshly completed matches
             # so the current season NEVER gets inserted into the 'scraped season table' until new season starts.
-            s3_utils.update_scraped_url_list('football_pipeline-misc', 'scraped_links.txt', [self.link])
+            s3_utils.update_scraped_url_list('football-misc', 'scraped_links.txt', [self.link])
 
 
 def _generate_scores_url(comp_no, year, league_name):
@@ -458,7 +494,7 @@ def team_lineups_loader_handler(event, context):
 
         # Build the object key:
         file_key = f"{league}/{season_code}/{date}-{home}-{away}.csv"
-        bucket = 'football_pipeline-lineups-and-managers'
+        bucket = 'football-lineups-and-managers'
         s3_utils.upload_df_to_s3(bucket, file_key, df)
         print("Called upload_to_s3. Exiting")
     return
@@ -474,6 +510,30 @@ def scrape_xg_results_handler(event, context):
             "Content-Type": "application/json"},
         "body": json.dumps({
             "Version ": version})}
+
+
+def scrape_current_season_xg_results_handler(event, context):
+    """
+    Lambda function handler that scrapes the current season
+    xg results for a given league and stores the results in
+    the football-xg-results S3 bucket.
+    Args:
+        event:
+        context:
+
+    Returns:
+
+    """
+    for league, url in SCORES_HOME_PAGE_URLS.items():
+        fb_ref_season = FBrefSeasonResultsPage(url)
+        fb_ref_season.save_to_s3()
+        time.sleep(3.2)
+
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json"},
+    }
 
 
 #TODO: need to reorganise this module better
@@ -512,10 +572,12 @@ def standardise_current_xg_results_files_handler(event, context):
     Returns:
 
     """
-    bucket = event['Records'][0]['s3']['bucket']['name']
-    key = event['Records'][0]['s3']['object']['key']
+    bucket_name = event['Records'][0]['s3']['bucket']['name']
+    file_key = event['Records'][0]['s3']['object']['key']
+    # Decoding the file key
+    file_key = urllib.parse.unquote_plus(file_key)
 
-    csv_obj = s3.get_object(Bucket=bucket, Key=key)
+    csv_obj = s3.get_object(Bucket=bucket_name, Key=file_key)
     body = csv_obj['Body'].read().decode('utf-8')
 
     df = pd.read_csv(io.StringIO(body))
@@ -528,7 +590,7 @@ def standardise_current_xg_results_files_handler(event, context):
 
     # we should partition by season and league name , in the folder structure
     league_name = df['league_name'].values[0]
-    season_code = '-'.join([d for d in key.split('-') if d.isdigit() and len(d) == 4])  # i only want 'year' digits to be caught here
+    season_code = '-'.join([d for d in file_key.split('-') if d.isdigit() and len(d) == 4])  # i only want 'year' digits to be caught here
 
     df.drop(columns=['league_name'], inplace=True)
     df['attendance'] = df['attendance'].astype(float)
@@ -543,7 +605,7 @@ def standardise_current_xg_results_files_handler(event, context):
     output_buffer.seek(0)
 
     # adopt the '=' in the folders to help Glue infer the partition key column names:
-    s3.put_object(Bucket='football_pipeline-xg-results-clean', Key=f"league={league_name}/season={season_code}/{key}.parquet",
+    s3.put_object(Bucket='football-xg-results-clean', Key=f"league={league_name}/season={season_code}/{file_key}.parquet",
                   Body=output_buffer.getvalue())
 
 

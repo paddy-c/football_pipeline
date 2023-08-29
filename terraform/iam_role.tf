@@ -65,6 +65,14 @@ resource "aws_lambda_permission" "allow_bucket" {
   source_arn    = "arn:aws:s3:::football-data-co-uk-raw"
 }
 
+resource "aws_lambda_permission" "allow_raw_xg_results_bucket" {
+  statement_id  = "AllowExecutionFromS3Bucket"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.standardise-raw-xg-csvs.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = "arn:aws:s3:::football-xg-results"
+}
+
 # Attach this policy to your Lambda's execution role to allow it to read objects from the S3 bucket
 data "aws_iam_policy_document" "lambda_read_access" {
   statement {

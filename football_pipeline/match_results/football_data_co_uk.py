@@ -24,6 +24,20 @@ from football_pipeline import common, s3_utils
 
 RAW_FOOTBALL_DATA_CO_UK_BUCKET = 'football-data-co-uk-raw'
 
+CLEAN_FOOTBALL_DATA_CO_UK_COLUMNS = [
+    'Div', 'Date', 'Time', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'FTR', 'HTHG', 'HTAG',
+    'HTR', 'Referee', 'HS', 'AS', 'HST', 'AST', 'HF', 'AF', 'HC', 'AC',
+    'HY', 'AY', 'HR', 'AR', 'B365H', 'B365D', 'B365A', 'BWH', 'BWD', 'BWA',
+    'IWH', 'IWD', 'IWA', 'PSH', 'PSD', 'PSA', 'WHH', 'WHD', 'WHA', 'VCH',
+    'VCD', 'VCA', 'MaxH', 'MaxD', 'MaxA', 'AvgH', 'AvgD', 'AvgA', 'B365>2.5', 'B365<2.5',
+    'P>2.5', 'P<2.5', 'Max>2.5', 'Max<2.5', 'Avg>2.5', 'Avg<2.5', 'AHh', 'B365AHH', 'B365AHA', 'PAHH',
+    'PAHA', 'MaxAHH', 'MaxAHA', 'AvgAHH', 'AvgAHA', 'B365CH', 'B365CD', 'B365CA', 'BWCH', 'BWCD',
+    'BWCA', 'IWCH', 'IWCD', 'IWCA', 'PSCH', 'PSCD', 'PSCA', 'WHCH', 'WHCD', 'WHCA',
+    'VCCH', 'VCCD', 'VCCA', 'MaxCH', 'MaxCD', 'MaxCA', 'AvgCH', 'AvgCD', 'AvgCA', 'B365C>2.5',
+    'B365C<2.5', 'PC>2.5', 'PC<2.5', 'MaxC>2.5', 'MaxC<2.5', 'AvgC>2.5', 'AvgC<2.5', 'AHCh', 'B365CAHH', 'B365CAHA',
+    'PCAHH', 'PCAHA', 'MaxCAHH', 'MaxCAHA', 'AvgCAHH', 'AvgCAHA'
+]
+
 COUNTRY_URL_LOOKUP = {
     'England': 'https://www.football-data.co.uk/englandm.php',
     'Scotland': 'https://www.football-data.co.uk/scotlandm.php',
@@ -59,6 +73,7 @@ season_date_format = {
     '2021': '%d/%m/%Y',
     '2122': '%d/%m/%Y',
     '2223': '%d/%m/%Y',
+    '2324': '%d/%m/%Y',
 }
 
 
@@ -123,7 +138,46 @@ def consolidate_footballdata_handler(event, context):
     s3_utils.upload_df_to_s3('football_pipeline-processed', 'football_data_co_uk/epl_results_consolidated.csv', consolidated_df)
 
 
-def clean_dates_and_delimiters(bucket_name, file_key) -> pd.DataFrame:
+def clean_excess_delimiters(full_s3_path, encoding) -> pd.DataFrame:
+    """
+    Function to clean up any excess comma delimiter issues in the 
+    raw football-data.co.uk csv files.
+
+    Args:
+        full_s3_path: the full s3 path to the file, e.g: s3://my-bucket/my-folder/my-file.csv
+        encoding: the encoding to use when reading the file
+    """
+
+    # download the s3 object to a buffer object
+    buffer = io.BytesIO()
+    wr.s3.download(path=full_s3_path, local_file=buffer)
+
+    with io.BytesIO() as outfile:
+        i = 0
+        for line in buffer.getvalue().decode(encoding).splitlines():
+
+            if i == 0:
+                column_list = [c for c in line.split(',') if is_valid_col(c)] # infer the expected number of columns from row 1
+                expected_column_count = len(column_list)
+                cleaned_header_line = ','.join(column_list)
+                if '\n' not in cleaned_header_line:
+                    cleaned_header_line = cleaned_header_line+'\n'
+                outfile.write(cleaned_header_line.encode('utf-8'))
+            else:
+                columns = line.strip().split(',')
+                if len(columns) > expected_column_count:  # could len(columns) ever be < expected_column_count?
+                    columns = columns[:expected_column_count]
+                cleaned_line = ','.join(columns) + '\n'
+                outfile.write(cleaned_line.encode('utf-8'))
+            i = i+1
+
+        # If this fails; throw the error 
+        outfile.seek(0)
+        df = pd.read_csv(outfile)
+    return df
+
+
+def clean_raw_football_data_ok_csv_file(bucket_name, file_key) -> pd.DataFrame:
     """
     Function to remove null/empty rows, clean up the dates and delimiters in 
     the football-data.co.uk csv files.
@@ -131,50 +185,44 @@ def clean_dates_and_delimiters(bucket_name, file_key) -> pd.DataFrame:
     Returns:
 
     """
-
+    s3_bucket_path = f"s3://{bucket_name}/{file_key}"
     try:
-        df = wr.s3.read_csv(f"s3://{bucket_name}/{file_key}", encoding='utf-8')
+        df = wr.s3.read_csv(s3_bucket_path, encoding='utf-8')
     except UnicodeDecodeError:
         try:
-            df = wr.s3.read_csv(f"s3://{bucket_name}/{file_key}", encoding='cp1252') # this is the only other encoding used that I've seen so far
+            df = wr.s3.read_csv(s3_bucket_path, encoding='cp1252') # this is the only other encoding used that I've seen so far
         except pd.errors.ParserError:
             # indicative of the excess comma issue present in some files
-            # download the s3 object to a buffer object
-            buffer = io.BytesIO()
-            wr.s3.download(path=f"s3://{bucket_name}/{file_key}", local_file=buffer)
+            df = clean_excess_delimiters(s3_bucket_path, encoding='cp1252')
+    except pd.errors.ParserError:
+        try:
+            df = clean_excess_delimiters(s3_bucket_path, encoding='utf-8')
+        except UnicodeDecodeError:
+            df = clean_excess_delimiters(s3_bucket_path, encoding='cp1252')
 
-            with io.BytesIO() as outfile:
-                i = 0
-                for line in buffer.getvalue().decode('cp1252').splitlines():
-
-                    if i == 0:
-                        column_list = [c for c in line.split(',') if is_valid_col(c)] # infer the expected number of columns from row 1
-                        expected_column_count = len(column_list)
-                        cleaned_header_line = ','.join(column_list)
-                        if '\n' not in cleaned_header_line:
-                            cleaned_header_line = cleaned_header_line+'\n'
-                        print(cleaned_header_line)
-                        outfile.write(cleaned_header_line.encode('utf-8'))
-                    else:
-                        columns = line.strip().split(',')
-                        if len(columns) > expected_column_count:  # could len(columns) ever be < expected_column_count?
-                            columns = columns[:expected_column_count]
-                        cleaned_line = ','.join(columns) + '\n'
-                        outfile.write(cleaned_line.encode('utf-8'))
-                    i = i+1
-
-                # If this fails; throw the error 
-                outfile.seek(0)
-                df = pd.read_csv(outfile)
-     
     # Drop null rows
     df.dropna(subset=['Div'], inplace=True)
+
+    # Occasional files have inconsistent use of commas in Referee names, seems to have been a 2001/2002 season issue (all English divs)
+    if 'Referee' in df.columns:
+        df['Referee'] = df.apply(lambda row: " ".join(row['Referee'].split(',')[::-1]) if ',' in row['Referee'] else row['Referee'], axis=1)
+
     # clean the dates, since different seasons have particular formats(!)
     df['season'] = re.search(r'season=(\d+)', file_key).group(1)
-    df['date_format'] = df['season'].apply(lambda row: _get_date_format(row)) #TODO: this is EPL specific
-    df['Date'] = df.apply(lambda row: pd.to_datetime(row['Date'], format=row['date_format']), axis=1)
+    if df['Div'].values[0] == 'E0':
+        df['date_format'] = df['season'].apply(lambda row: _get_date_format(row))  # Defer the DATE_PARSE logic to SQL for other leagues
+        df['Date'] = df.apply(lambda row: pd.to_datetime(row['Date'], format=row['date_format']), axis=1)
     df['HomeTeam'] = df['HomeTeam'].str.strip()
     df['AwayTeam'] = df['AwayTeam'].str.strip()
+
+    # Add in any missing columns, otherwise the glue job will fail
+    missing_columns = [col for col in CLEAN_FOOTBALL_DATA_CO_UK_COLUMNS if col not in df.columns]
+    if missing_columns:
+        df = pd.concat([df, pd.DataFrame(columns=missing_columns)], axis=1)
+
+    unwanted_columns = [col for col in df.columns if col not in CLEAN_FOOTBALL_DATA_CO_UK_COLUMNS]
+    if unwanted_columns:
+        df.drop(columns=unwanted_columns, inplace=True)
 
     return df
     
@@ -188,7 +236,7 @@ def clean_footballdata_handler(event, context):
     tools.
 
     Args:
-        event:
+        event: an S3 put event from football-data-co-uk-raw bucket
         context:
 
     Returns:
@@ -198,10 +246,9 @@ def clean_footballdata_handler(event, context):
     file_key = event['Records'][0]['s3']['object']['key']
     # Decoding the file key
     file_key = urllib.parse.unquote_plus(file_key)
-
-    cleaned_df = clean_dates_and_delimiters(bucket_name, file_key)
-    cleaned_df.drop(columns=['season', 'date_format'], inplace=True)
-    s3_utils.upload_df_to_s3('football-data-co-uk-clean', file_key=file_key, df=cleaned_df)
+    cleaned_df = clean_raw_football_data_ok_csv_file(bucket_name, file_key)
+    s3_utils.upload_df_to_s3('football-data-co-uk-clean', file_key=file_key, df=cleaned_df[CLEAN_FOOTBALL_DATA_CO_UK_COLUMNS])
+    print(f"{file_key} cleaned and loaded to s3.")
 
 
 class FootballDataCountry:

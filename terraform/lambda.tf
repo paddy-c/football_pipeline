@@ -18,6 +18,7 @@ resource "aws_lambda_function" "clean_football_data_co_uk" {
     command = ["football_data_co_uk.clean_footballdata_handler"]
   }
   role    = aws_iam_role.lambda_ex.arn
+  timeout = "900"
 }
 
 # Pandas-based util that appended all partition csvs into single dataframe, which resolves column alignment issues

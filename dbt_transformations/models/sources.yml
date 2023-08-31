@@ -10,7 +10,7 @@ sources:
   - name: football_data_co_uk
     schema: football_athena
     tables:
-      - name: results_and_odds_country_england
+      - name: results_and_odds_new_country_england
         columns:
           - name: div
             description: League division

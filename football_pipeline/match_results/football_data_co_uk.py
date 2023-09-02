@@ -5,6 +5,7 @@ processing of data from football-data.co.uk.
 Author: Padraig Cleary
 """
 
+from datetime import datetime
 import io
 import json
 import time
@@ -52,90 +53,30 @@ COUNTRY_URL_LOOKUP = {
     'Greece': 'https://www.football-data.co.uk/greecem.php',
 }
 
-season_date_format = {
-    '0607': '%d/%m/%y',
-    '0708': '%d/%m/%y',
-    '0809': '%d/%m/%y',
-    '0910': '%d/%m/%y',
-    '1011': '%d/%m/%y',
-    '1112': '%d/%m/%y',
-    '1213': '%d/%m/%y',
-    '1314': '%d/%m/%y',
-    '1415': '%d/%m/%y',
 
-    '1516': '%d/%m/%Y',
+def custom_date_parser(date_str: str) -> datetime.date:
+    """
+    Custom date parser to handle the inconsistent date formats,
+    taking advantage of the regularity of the date format across
+    all divisions, ie the day and month are always the first two
+    parts of the date string, with either %y or %Y format used for the year.
+    """
 
-    '1617': '%d/%m/%y',
+    day, month, year = date_str.split("/")
+    
+    if len(year) == 2:
+        year_format = "%y"
+    else:
+        year_format = "%Y"
+        
+    date_format = f"%d/%m/{year_format}"
 
-    '1718': '%d/%m/%Y',
-    '1819': '%d/%m/%Y',
-    '1920': '%d/%m/%Y',
-    '2021': '%d/%m/%Y',
-    '2122': '%d/%m/%Y',
-    '2223': '%d/%m/%Y',
-    '2324': '%d/%m/%Y',
-}
+    return datetime.strptime(date_str, date_format).date()
 
 
 def is_valid_col(s):
     is_not_empty = bool(s.strip()) and any(char.isalnum() for char in s)
     return is_not_empty
-
-
-def _get_date_format(season_string):
-    """
-    For EPL ('E0') data, look up the date format
-    given the season_string, e.g '1718'
-    Args:
-        season_string:
-
-    Returns:
-        date_format: the date format to be used by pandas.to_datetime
-
-    """
-    for season, date_format in season_date_format.items():
-        if season in season_string:
-            return date_format
-
-
-def concat_and_clean_footballdata_results() -> pd.DataFrame:
-    """
-    Concatenates all the EPL csv files into Pandas df;
-    clean the date column and apply the fbref->footballdata.co.uk team name mapping
-    for ease of future joining.
-    Returns:
-
-    """
-    football_data_to_fbref_names = {v: k for k, v in common.FB_REF_FOOTBALL_DATA_TEAM_MAP.items()}
-    df = s3_utils.consolidate_all_bucket_csvs('football_pipeline-lake', 'E0')
-    df.dropna(subset=['Div'], inplace=True)
-    # clean the dates, since different seasons have particular formats(!)
-    df['date_format'] = df['season'].apply(lambda row: _get_date_format(row))
-    df['date_new'] = df.apply(lambda row: pd.to_datetime(row['Date'], format=row['date_format']), axis=1)
-    # add the fbref team name equivalents...for easy joining later
-    df['home_fbref'] = df['HomeTeam'].map(football_data_to_fbref_names)
-    df['away_fbref'] = df['AwayTeam'].map(football_data_to_fbref_names)
-
-    return df
-
-
-def consolidate_footballdata_handler(event, context):
-    """
-    Lambda function handler that aims to apply some basic cleaning
-    and team name mapping for the football-data.co.uk csv result files.
-    Currently only implemented for EPL; other leagues are expected to have
-    their own data quirks that will probably need further hand-crafted cleaning
-    tools.
-
-    Args:
-        event:
-        context:
-
-    Returns:
-
-    """
-    consolidated_df = concat_and_clean_footballdata_results()
-    s3_utils.upload_df_to_s3('football_pipeline-processed', 'football_data_co_uk/epl_results_consolidated.csv', consolidated_df)
 
 
 def clean_excess_delimiters(full_s3_path, encoding) -> pd.DataFrame:
@@ -177,7 +118,7 @@ def clean_excess_delimiters(full_s3_path, encoding) -> pd.DataFrame:
     return df
 
 
-def clean_raw_football_data_ok_csv_file(bucket_name, file_key) -> pd.DataFrame:
+def clean_raw_football_data_co_uk_csv_file(bucket_name, file_key) -> pd.DataFrame:
     """
     Function to remove null/empty rows, clean up the dates and delimiters in 
     the football-data.co.uk csv files.
@@ -205,13 +146,12 @@ def clean_raw_football_data_ok_csv_file(bucket_name, file_key) -> pd.DataFrame:
 
     # Occasional files have inconsistent use of commas in Referee names, seems to have been a 2001/2002 season issue (all English divs)
     if 'Referee' in df.columns:
+        df['Referee'] = df['Referee'].astype(str)  # bugfix for cases where Referee column is read in as object
         df['Referee'] = df.apply(lambda row: " ".join(row['Referee'].split(',')[::-1]) if ',' in row['Referee'] else row['Referee'], axis=1)
+    
+    # This is preferable to the previous method of hardcoding date formats based on season. Use custom parser to determine if it's %y or %Y
+    df['Date'] = df['Date'].apply(custom_date_parser)
 
-    # clean the dates, since different seasons have particular formats(!)
-    df['season'] = re.search(r'season=(\d+)', file_key).group(1)
-    if df['Div'].values[0] == 'E0':
-        df['date_format'] = df['season'].apply(lambda row: _get_date_format(row))  # Defer the DATE_PARSE logic to SQL for other leagues
-        df['Date'] = df.apply(lambda row: pd.to_datetime(row['Date'], format=row['date_format']), axis=1)
     df['HomeTeam'] = df['HomeTeam'].str.strip()
     df['AwayTeam'] = df['AwayTeam'].str.strip()
 
@@ -246,9 +186,12 @@ def clean_footballdata_handler(event, context):
     file_key = event['Records'][0]['s3']['object']['key']
     # Decoding the file key
     file_key = urllib.parse.unquote_plus(file_key)
-    cleaned_df = clean_raw_football_data_ok_csv_file(bucket_name, file_key)
+    cleaned_df = clean_raw_football_data_co_uk_csv_file(bucket_name, file_key)
     s3_utils.upload_df_to_s3('football-data-co-uk-clean', file_key=file_key, df=cleaned_df[CLEAN_FOOTBALL_DATA_CO_UK_COLUMNS])
     print(f"{file_key} cleaned and loaded to s3.")
+    return {
+        'statusCode': 200,
+    }
 
 
 class FootballDataCountry:

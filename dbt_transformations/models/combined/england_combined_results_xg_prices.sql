@@ -45,4 +45,6 @@ using(date, hometeam, awayteam)
 --and xg.away_fd = results_fd.awayteam 
 --and xg.date = results_fd.date 
 where 
-  div in ('E0','E1','E2','E3')
+div in ('E0','E1','E2') -- xg data for top 3 divisions only so far
+and date > '2014-07-01' -- xg ref goes back to 2014-06-01 for E0, E1, E2 
+  

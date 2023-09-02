@@ -10,4 +10,22 @@ models:
               - date
               - hometeam
               - awayteam
+        - dbt_utils.expression_is_true:
+            expression: "b365h > 0"
+
+  - name: stg_expected_results
+    description: 'Check that xg matches are unique'
+
+    tests:
+        - dbt_utils.unique_combination_of_columns:
+            combination_of_columns:
+              - date
+              - home
+              - away
+
+  - name: england_combined_results_xg_prices
+     
+    tests:
+        - not_null:
+            column_name: score
 

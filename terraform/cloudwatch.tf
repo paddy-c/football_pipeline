@@ -1,7 +1,7 @@
 resource "aws_cloudwatch_event_rule" "daily" {
   name                = "trigger-lambda-daily"
   description         = "Trigger my lambda every day"
-  schedule_expression = "cron(17 8 * * ? *)" # This cron expression triggers at 12:00 PM (UTC) every day
+  schedule_expression = "cron(17 8 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "trigger_daily_update_of_football_data_co_uk" {

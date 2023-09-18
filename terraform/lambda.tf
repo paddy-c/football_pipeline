@@ -21,23 +21,12 @@ resource "aws_lambda_function" "clean_football_data_co_uk" {
   timeout = "900"
 }
 
-# Pandas-based util that appended all partition csvs into single dataframe, which resolves column alignment issues
-resource "aws_lambda_function" "consolidate_footballdata_lambda" {
-  function_name = "consolidate_footballdata_lambda"
-  image_uri     = "${aws_ecr_repository.football_repository.repository_url}:aws_ingestion_lambda_tasks"
-  role          = aws_iam_role.team-lineups-consumer-role.arn
-  package_type  = "Image"
-  image_config {
-    command = ["football_data_co_uk.consolidate_footballdata_handler"]
-  }
-  timeout = 60
-}
-
 # Simple loader function to load the raw xg results files from fbref.com
 resource "aws_lambda_function" "load-raw-xg-csvs" {
   function_name = "xg_results_loader"
   image_uri     = "${aws_ecr_repository.football_repository.repository_url}:aws_ingestion_lambda_tasks"
   role          = aws_iam_role.lambda_ex.arn
+  memory_size   = 1000
   package_type  = "Image"
   image_config {
     command = ["fb_ref.scrape_current_season_xg_results_handler"]

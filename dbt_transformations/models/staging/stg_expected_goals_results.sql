@@ -20,7 +20,6 @@ select
   league as league_fbref,
   season as season_fbref
 
-
 from
   {{ source('fb_ref', 'football_xg_results_clean') }}
 where

@@ -1,3 +1,8 @@
+"""
+Script to manually retrigger the lambda cleaning
+function on the football-xg-results raw s3 bucket.
+"""
+
 import json
 import os
 
@@ -7,8 +12,8 @@ import requests
 s3 = boto3.client('s3')
 lambda_client = boto3.client('lambda')
 
-bucket = 'football-data-co-uk-raw'
-lambda_function_name = 'clean_football_data_co_uk'
+bucket = 'football-xg-results'
+lambda_function_name = 'standardise-raw-xg-csvs'
 
 paginator = s3.get_paginator('list_objects_v2')
 pages = paginator.paginate(Bucket=bucket)

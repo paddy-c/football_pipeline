@@ -285,7 +285,7 @@ def scrape_team_lineups():
     for comp_no, league_name in COMPETITION_NUMBER_LEAGUE_MAP.items():
         competition_season_links = [
             (_generate_scores_url(comp_no, year, league_name), league_name, create_season_code(league_name, year))
-            for year in range(2023, 2023 - 10, -1)
+            for year in range(2024, 2013, -1)
         ]
 
         print(f"League: {league_name}")
@@ -597,6 +597,11 @@ def standardise_current_xg_results_files_handler(event, context):
 
     df['time'] = df['time'].fillna('missing')
     df['venue'] = df['venue'].fillna('missing')
+
+    # clean penalty shootout affected scorelines (from MLS)
+    pattern = r'\([^)]*\)'
+    df['away_goals'] = df['away_goals'].apply(lambda x: int(re.sub(pattern, '', x).strip()))
+    df['home_goals'] = df['home_goals'].apply(lambda x: int(re.sub(pattern, '', x).strip()))
 
     output_columns = expected_columns
     output_buffer = io.BytesIO()

@@ -20,9 +20,22 @@ from
   {{ ref("fb_ref_football_data_co_uk_mapping")}}
 ),
 
+managers_and_lineups as (
+select 
+  date,
+  home_team as home, -- home/away are the fb_ref names
+  away_team as away,
+  home_manager,
+  away_manager,
+  home_starting_11,
+  away_starting_11
+from
+  {{ ref('dim_match_team_lineups_and_managers') }}
+),
+
 xg_results_with_fd_names as (
 select * from
-{{ ref('stg_expected_goals_results')}} xg 
+{{ ref('dim_match_expected_goals')}} xg 
 left join 
   home_team_mapping 
 using 
@@ -32,15 +45,15 @@ left join
 using
   (away)
 )
- 
   
 select 
   *
 from 
-  {{ ref('stg_results_and_prices') }} results_fd
+  {{ ref('fct_match_results_and_odds') }} results_fd
 left join
-  xg_results_with_fd_names xg
-using(date, hometeam, awayteam)
+  xg_results_with_fd_names xg using(date, hometeam, awayteam)
+left join
+  managers_and_lineups using(date, home, away)
 where 
 div in ('E0','E1','E2') -- xg data for top 3 divisions only so far
 and date > '2014-07-01' -- xg ref goes back to 2014-06-01 for E0, E1, E2 

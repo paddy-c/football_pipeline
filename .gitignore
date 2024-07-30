@@ -24,3 +24,6 @@ terraform/.terraform.lock.hcl
 terraform/.terraform/
 terraform/logs/
 
+dbt_transformations/dbt_packages/
+dbt_transformations/logs/
+dbt_transformations/target/

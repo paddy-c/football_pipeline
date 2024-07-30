@@ -23,13 +23,13 @@ in order to gain greater insight and context for analytics and modeling purposes
 - Docker
 - Python, SQL
 - Infra partially managed by Terraform; migration in progress
-- DBT (WIP)
+- DBT
 
 
-## Data Source Pipelines
+# Ingestion Pipelines
 
 
-*DISCLAIMER: This is an evolving piece of work, so no guarantees that the below steps are fully up-to-date.*
+*DISCLAIMER: This is an evolving piece of work, so the below may not always be fully up-to-date.*
 
 ### Basic Match Statistics & Bookmaker Prices
 
@@ -63,10 +63,29 @@ further analytics and queries.
 The team lineups queue data was consumed and processed via a Dockerized [Lambda function](football_pipeline/expected_goals/fb_ref.py) and
 loaded to S3.
 
-TBC
 
-### Expected Goals ('Xg') Data
 
-TBD
+
+
+
+# Data Model
+
+With the raw data available in S3/Athena, a simple star schema data mart based on a match-level grain was developed:
+
+<img src="images/dbt_dag_2024-07-30.png" width="900" height="200">
+
+
+
+- <b>fct_match_results_and_odds: </b>This table serves as the central fact table in our data model, capturing the core metrics of each football match, including match results and betting odds. It is the primary source of quantitative data and forms the backbone of our analytical queries.
+Dimension Tables:
+
+- <b>dim_match_expected_goals</b>: This dimension table contains expected goals (xG) data, providing insights into the quality of chances created by each team. It is used to enrich the central fact table with predictive performance metrics.
+
+- <b>dim_match_team_lineups_and_managers</b>: This dimension table includes detailed information about team lineups and managers for each match. It adds contextual data to the fact table, allowing for deeper analysis of team compositions and managerial strategies.
+
+- <b>obt_match_results_all_details</b>: This view combines the central fact table with the dimension tables, providing a single, comprehensive view of all match details. It integrates match results, betting odds, expected goals, and team lineups into one table.
+
+- <b>obt_match_results_all_details_team_level</b>: This view presents data at the team level, transforming the typical home_team and away_team grain into a more accessible format for team-level analysis. It facilitates easier querying and comparison of team performance across matches.
+
 
 

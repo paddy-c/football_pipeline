@@ -10,7 +10,7 @@ sources:
   - name: football_data_co_uk
     schema: football_athena
     tables:
-      - name: results_and_odds_new_country_england
+      - name: match_results_and_odds
         columns:
           - name: div
             description: League division
@@ -351,6 +351,10 @@ sources:
             description: closing avgahh
           - name: avgcaha
             description: closing avgaha
+          - name: country
+            description: Country
+          - name: league
+            description: League (division) identifier code
 
 
 

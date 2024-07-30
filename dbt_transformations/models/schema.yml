@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_results_and_prices
+  - name: fct_match_results_and_odds
     description: 'Check that matches are unique'
 
     tests:
@@ -13,7 +13,7 @@ models:
         - dbt_utils.expression_is_true:
             expression: "b365h > 0"
 
-  - name: stg_expected_results
+  - name: dim_match_expected_goals
     description: 'Check that xg matches are unique'
 
     tests:
@@ -23,9 +23,18 @@ models:
               - home
               - away
 
-  - name: england_combined_results_xg_prices
-     
+  - name: obt_match_results_all_details
+    description: 'Match level results with all odds, XG, managers and lineups info.'
     tests:
-        - not_null:
-            column_name: score
+        - dbt_utils.unique_combination_of_columns:
+            combination_of_columns:
+              - date
+              - hometeam
+              - awayteam
 
+        - column_equality:
+            column1: fthg
+            column2: home_goals
+        - column_equality:
+            column1: ftag
+            column2: away_goals

@@ -3,6 +3,7 @@
     materialized="view"
   )
 }}
+-- TODO: consider incremental here.
 
 -- group lineups into arrays
 SELECT

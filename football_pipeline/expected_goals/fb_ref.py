@@ -525,7 +525,11 @@ def scrape_current_season_xg_results_handler(event, context):
 
     """
     for league, url in SCORES_HOME_PAGE_URLS.items():
-        fb_ref_season = FBrefSeasonResultsPage(url)
+        try:
+            fb_ref_season = FBrefSeasonResultsPage(url)
+        except Exception as e: # Some leagues may not have started (empty data can give rise to exceptions based on inferred types) 
+            print(e)
+            continue
         fb_ref_season.save_to_s3()
         time.sleep(3.2)
 

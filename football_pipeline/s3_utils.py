@@ -24,7 +24,7 @@ def upload_df_to_s3(bucket_name: str, file_key: str, df: pd.DataFrame):
 
 
 def get_scraped_urls(
-    bucket_name="football_pipeline-misc", file_key="scraped_links.txt"
+    bucket_name="football-misc", file_key="scraped_links.txt"
 ) -> Set:
     """ """
     s3 = boto3.client("s3")

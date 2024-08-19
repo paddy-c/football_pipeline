@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import time
+import typing
 import urllib.parse
 
 import boto3
@@ -40,6 +41,30 @@ FB_REF_COLUMNS = [
     "home_goals",
     "away_goals",
 ]
+
+GOAL_LOG_COLUMNS = [
+    'Rk',
+    'Date',
+    'Comp',
+    'Round',
+    'Venue',
+    'Scorer',
+    'Opponent',
+    'Start',
+    'xG',
+    'PSxG',
+    'Body Part',
+    'Distance',
+    'Minute',
+    'Score',
+    'Goalkeeper',
+    'Assist',
+    'GCA1',
+    'Type',
+    'GCA2',
+    'Type.1',
+    'Notes',
+    'for_or_against']
 
 BASE_URL = "https://fbref.com"
 
@@ -616,6 +641,168 @@ def standardise_current_xg_results_files_handler(event, context):
     # adopt the '=' in the folders to help Glue infer the partition key column names:
     s3.put_object(Bucket='football-xg-results-clean', Key=f"league={league_name}/season={season_code}/{file_key}.parquet",
                   Body=output_buffer.getvalue())
+
+
+class FbrefLeagueHomePageCrawler:
+    """
+    Class to help with crawling through every team's
+    statistics url for a given league. First, the given 'home'
+    stats page for a given league, e.g:
+    https://fbref.com/en/comps/9/Premier-League-Stats is used
+    to find each teams stats home page, e.g:
+    https://fbref.com/en/squads/7c21e445/West-Ham-United-Stats .
+
+    Using the regulalarity of the FBref URL structure, 
+    we can build the url containing the specific data that
+    we are interested in, e.g: for goal logs, the required url is
+    https://fbref.com/en/squads/7c21e445/2023-2024/goallogs/all_comps/West-Ham-United-Goal-Logs-All-Competitions
+    """
+    def __init__(self, league_url: str):
+        # TODO: it would be more natural to pass in the FBref-style league name, rather than demand the full url
+        self.link = league_url
+        self.url_soup = self._get_soup_object(self.link)
+        self.team_name_map = self.build_display_name_full_name_mapper()
+        self.team_squad_links = self.get_squad_links()
+        self.current_season_code = "2024-2025"   # TODO: see if you can reliably infer this
+        
+    def _get_soup_object(self, link) -> bs:
+        """
+        Get the BeautifulSoup object for the given season
+        level URL.
+
+        Returns:
+            url_soup
+        """
+        print(f"Scraping: {link}")
+        response = requests.get(link)
+        time.sleep(3.2)
+        # can re-use this soup object for more efficient crawling, fewer requests
+        url_soup = bs(response.text, "html.parser")
+        return url_soup
+     
+    def build_display_name_full_name_mapper(self):
+        """
+        Build the dictionary that maps a teams abbreviated display 
+        name (used in match result data) to their full name. 
+        """
+
+        search_string = 'squads'
+        # Find all 'tr' tags inside a 'tbody'
+        league_table = self.url_soup.find('table')
+        table_rows = league_table.select('tbody tr') if league_table else []
+        lookup = {link['href'].split("/")[-1].replace("-Stats", ""): link.text.replace(" vs","")
+                          for row in table_rows
+                          for link in row.find_all('a', href=True)
+                          if search_string in link['href']}
+        return lookup
+
+    def get_squad_links(self) -> typing.List[str]:
+        """
+        Get all the team stats urls in the main league url,
+        e.g: a league url "https://fbref.com/en/comps/9/Premier-League-Stats"
+        will contain the stats url for each team,
+        e.g West Ham: 'https://fbref.com/en/squads/7c21e445/West-Ham-United-Stats'
+        """
+
+        # Find all 'tr' tags inside a 'tbody'
+        table_rows = self.url_soup.select('tbody tr')
+
+        filtered_links = ["https://fbref.com"+link['href']
+                          for row in table_rows
+                          for link in row.find_all('a', href=True)
+                          if 'squads' in link['href']]
+
+        return list(set(filtered_links))
+
+    def _get_goal_log_url(self, squad_url, season_code) -> str:
+        """
+        For a given squad url and season code, construct the
+        goal logs url for that team, season code.
+        """
+        squad_base_url = "/".join(squad_url.split("/")[:-1])+"/"
+        end_of_url = squad_url.split("/")[-1]
+        goal_log_url = squad_base_url + season_code + "/goallogs/all_comps/" + end_of_url.replace("-Stats","-Goal-Logs-All-Competitions")
+        return goal_log_url
+    
+    def extract_and_load_goal_log(self, squad_link, season_code):
+        """
+        Extract and load goal log data for the given squad, season
+        into S3.
+        """
+        goal_log_url = self._get_goal_log_url(squad_link, self.current_season_code)
+        full_team_name = squad_link.split("/")[-1].replace("-Stats","")
+        display_name = self.team_name_map[full_team_name] # we need this string as this is what's used to identify teams in the other fbref tables
+        goal_log_url_soup = self._get_soup_object(goal_log_url)
+        table = goal_log_url_soup.find_all("table")
+        
+        # in cases at start of seasons if no goals are recorded:
+        try:
+            goals_for = pd.read_html(str(table))[0]
+        except ValueError as exc:
+            if str(exc).strip() == "No tables found":
+                goals_for = pd.DataFrame(columns=GOAL_LOG_COLUMNS)
+        
+        for col in GOAL_LOG_COLUMNS:
+            if col.lower() not in [c.lower() for c in goals_for.columns.tolist()]:
+                goals_for[col] = None
+        goals_for['for_or_against'] = 'for'
+
+        try:
+            goals_against = pd.read_html(str(table))[1]
+        except ValueError as exc:
+            if str(exc).strip() == "No tables found":
+                goals_against = pd.DataFrame(columns=GOAL_LOG_COLUMNS)
+
+        for col in GOAL_LOG_COLUMNS:
+            if col.lower() not in [c.lower() for c in goals_against.columns.tolist()]:
+                goals_against[col] = None
+        goals_against['for_or_against'] = 'against'
+
+        df = pd.concat([goals_for[GOAL_LOG_COLUMNS], goals_against[GOAL_LOG_COLUMNS]])
+
+        for col in GOAL_LOG_COLUMNS:
+            if col.lower() == 'rk':
+                df[col] = df[col].astype(int)
+            elif col.lower() in ['xg','psxg', 'distance']:
+                df[col] = df[col].astype(float)
+            else:
+                df[col] = df[col].astype(str)
+
+        output_buffer = io.BytesIO()
+        df.to_parquet(output_buffer, index=False)
+        output_buffer.seek(0)
+        file_key = f"{season_code}-{full_team_name}-goals-log"
+        resp = s3.put_object(Bucket='football-goal-logs-raw', 
+                      Key=f"team={display_name}/{file_key}.parquet",
+                      Body=output_buffer.getvalue())        
+        if resp['ResponseMetadata']['HTTPStatusCode'] == 200:
+            print(f"Uploaded {file_key}.parquet to s3")
+        return
+        
+    def extract_and_load_all_teams_goal_logs(self):
+        """
+        Extract and load the goal logs for each team
+        for this current season.
+        """
+        for squad_link in self.team_squad_links:
+            self.extract_and_load_goal_log(squad_link, self.current_season_code)
+            time.sleep(3.5)
+    
+
+def extract_and_load_current_season_goal_log_handler(event, context):
+    """
+    Lambda handler function that scrapes the current season 
+    goal logs for each team and loads to the s3 location.
+    """
+
+    crawler = FbrefLeagueHomePageCrawler("https://fbref.com/en/comps/9/Premier-League-Stats")
+    crawler.extract_and_load_all_teams_goal_logs()
+
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json"},
+    }
 
 
 if __name__ == "__main__":

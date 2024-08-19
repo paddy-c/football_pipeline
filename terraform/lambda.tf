@@ -46,6 +46,18 @@ resource "aws_lambda_function" "standardise-raw-xg-csvs" {
   timeout = 900
 }
 
+# Lambda for extracting and loading the goal logs for every team in the current season
+resource "aws_lambda_function" "extract-and-load-current-season-goal-logs" {
+  function_name = "extract-and-load-current-season-goal-logs"
+  image_uri     = "${aws_ecr_repository.football_repository.repository_url}:aws_ingestion_lambda_tasks"
+  role          = aws_iam_role.lambda_ex.arn
+  package_type  = "Image"
+  image_config {
+    command = ["fb_ref.extract_and_load_current_season_goal_log_handler"]
+  }
+  timeout = 900
+}
+
 # Load the lineups objects from the team lineups queue
 resource "aws_lambda_function" "team_lineups_loader" {
   depends_on    = [aws_iam_role.team-lineups-consumer-role]

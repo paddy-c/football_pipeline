@@ -9,10 +9,13 @@ notebooks/.ipynb_checkpoints/**
 *.xlsx
 *.tfstate
 *.backup
+*.gitkeep
 
 .DS_Store
 .idea/
-
+*.swp
+*.vscode
+.swp
 
 /lambda_payloads/
 /.ipynb_checkpoints/
